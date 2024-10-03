@@ -15,10 +15,6 @@ const writeFile = promisify(fs.writeFile);
 const unlink = promisify(fs.unlink);
 
 
-
-
-
-
 // const makeRoutine = async (req, res) => {
 //     try {
 //         const { commercialId, pointMarchand, veilleConcurrentielle, tpeList, latitudeReel, longitudeReel, routing_id, commentaire_routine } = req.body;
@@ -1438,6 +1434,37 @@ const allRoutings = async (req, res) => {
 
     if (typeAgentId !== 9) {
         return res.status(400).json({ message: "Vous devez être le directeur commercial pour avoir accès à cette ressource" });
+    }
+
+    
+    try {
+        // Réessayez la requête jusqu'à 3 fois en cas d'échec
+        let retries = 3;
+        while (retries > 0) {
+            try {
+                const [rows] = await pool2.query(`
+SELECT * FROM routing INNER JOIN bdm ON routing.bdm_routing_id = bdm.id JOIN agent ON bdm.agent_bdm_id = agent.id`);
+
+                if (rows.length > 0) {
+                    return res.status(200).json(rows);
+                } else {
+                    return res.status(404).json({ message: "Aucune donnée trouvée" });
+                }
+            } catch (error) {
+                if (error.code === 'ECONNRESET') {
+                    console.warn('Connexion réinitialisée, tentative de reconnexion...');
+                    retries--;
+                    if (retries === 0) {
+                        throw new Error('Impossible de récupérer les données après plusieurs tentatives');
+                    }
+                } else {
+                    throw error;
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Erreur lors de la récupération des données:", error);
+        return res.status(500).json({ message: "Erreur serveur" });
     }
 
 
